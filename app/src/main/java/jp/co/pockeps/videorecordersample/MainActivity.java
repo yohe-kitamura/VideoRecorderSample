@@ -31,16 +31,24 @@ import android.widget.Button;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import processing.ffmpeg.videokit.AsyncCommandExecutor;
+import processing.ffmpeg.videokit.Command;
+import processing.ffmpeg.videokit.LogLevel;
+import processing.ffmpeg.videokit.ProcessingListener;
+import processing.ffmpeg.videokit.VideoKit;
 
 @SuppressWarnings("deprecation")
-public class MainActivity extends Activity {
+public class MainActivity extends Activity implements ProcessingListener {
 
     private static final String TAG = "Recorder";
     private Camera mCamera;
     private TextureView mPreview;
     private MediaRecorder mMediaRecorder;
     @Nullable
-    private File mOutputFile = CameraHelper.getOutputMediaFile(CameraHelper.MEDIA_TYPE_VIDEO);
+    private File mOutputFile;
     private boolean isRecording = false;
     private Button captureButton;
 
@@ -51,6 +59,25 @@ public class MainActivity extends Activity {
 
         mPreview = findViewById(R.id.surface_view);
         captureButton = findViewById(R.id.button_capture);
+    
+        File outputMediaFile = CameraHelper.getOutputMediaFile(CameraHelper.MEDIA_TYPE_VIDEO);
+        List<String> list = new ArrayList<>();
+        for (File file: outputMediaFile.getParentFile().listFiles()) {
+            list.add(file.getAbsolutePath());
+        }
+    
+        final VideoKit videoKit = new VideoKit();
+        videoKit.setLogLevel(LogLevel.FULL);
+        final Command command = videoKit.createCommand()
+                .overwriteOutput()
+                .inputPath(list.get(0))
+                .inputPath(list.get(1))
+                .outputPath(list.get(0) + ".mp4" )
+                .customCommand(" -filter_complex [0:0]fade=out:70:30[a];[1:0]fade=in:0:0[b];[a][0:1][b][1:1]concat=n=2:v=1:a=1")
+                .experimentalFlag()
+                .build();
+    
+        new AsyncCommandExecutor(command, this).execute();
     }
 
     /**
@@ -153,12 +180,24 @@ public class MainActivity extends Activity {
     public void onClickVideoPlay(View view) {
         startActivity(new Intent(this, VideoPlayerActivity.class));
     }
-
+    
+    @Override
+    public void onSuccess(String path) {
+        Log.d(TAG, "onSuccess: ");
+        
+    }
+    
+    @Override
+    public void onFailure(int returnCode) {
+        Log.d(TAG, "onFailure: ");
+    }
+    
     private class MediaPrepareTask extends AsyncTask<Void, Void, Boolean> {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
             // ビデオ録画準備
+            mOutputFile = CameraHelper.getOutputMediaFile(CameraHelper.MEDIA_TYPE_VIDEO);
             if (mOutputFile != null && prepareVideoRecorder(mOutputFile)) {
                 // ビデオ録画開始
                 mMediaRecorder.start();
